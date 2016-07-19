@@ -157,8 +157,8 @@ static void metadata_callback(const FLAC__StreamDecoder *decoder,
             }
             continue;
           }
-          if(oi_strncasecmp(entry,"REPLAYGAIN_ALBUM_PEAK=",22)==0
-             ||oi_strncasecmp(entry,"REPLAYGAIN_TRACK_PEAK=",22)==0){
+          if(oi_strncasecmp(entry,"REPLAYGAIN_ALBUM_PEAK=",22)==0 || 
+             oi_strncasecmp(entry,"REPLAYGAIN_TRACK_PEAK=",22)==0){
             continue;
           }
           if(!strchr(entry,'=')){
@@ -170,21 +170,31 @@ static void metadata_callback(const FLAC__StreamDecoder *decoder,
           comment_add(&inopt->comments,&inopt->comments_length,NULL,entry);
         }
         setlocale(LC_NUMERIC,saved_locale);
-        /*Set the header gain to the album gain after converting to the R128
-          reference level.*/
+        /*Set the header gain to the album gain */
+        /*Use the replaygain reference level, not the R128 reference */
         if(saw_album_gain){
-          gain=256*(album_gain+(84-reference_loudness))+0.5;
+          gain=256*(album_gain+(89-reference_loudness))+0.5;
           inopt->gain=gain<-32768?-32768:gain<32767?(int)floor(gain):32767;
         }
-        /*If there was a track gain, then add an equivalent R128 tag for that.*/
-        if(saw_track_gain){
-          char track_gain_buf[7];
-          int track_gain_val;
-          gain=256*(track_gain-album_gain)+0.5;
-          track_gain_val=gain<-32768?-32768:gain<32767?(int)floor(gain):32767;
-          sprintf(track_gain_buf,"%i",track_gain_val);
+        /*If there was an album gain, set the replaygain tag to 0 so players
+          know not to apply a fallback gain*/
+        if(saw_album_gain){
+          char album_gain_buf[11];
+          sprintf(album_gain_buf,"%.2f dB", reference_loudness-89);
           comment_add(&inopt->comments,&inopt->comments_length,
-             "R128_TRACK_GAIN",track_gain_buf);
+             "REPLAYGAIN_ALBUM_GAIN", album_gain_buf);
+          comment_add(&inopt->comments,&inopt->comments_length,
+             "REPLAYGAIN_ALBUM_PEAK", "0.0"); // YOLO
+        }
+        /*If there was a track gain, then adjust the replaygain for that.*/
+        if(saw_track_gain){
+          char track_gain_buf[11];
+          gain=track_gain-album_gain+(reference_loudness-89);
+          sprintf(track_gain_buf,"%.2f dB",gain);
+          comment_add(&inopt->comments,&inopt->comments_length,
+             "REPLAYGAIN_TRACK_GAIN",track_gain_buf);
+          comment_add(&inopt->comments,&inopt->comments_length,
+             "REPLAYGAIN_TRACK_PEAK", "0.0"); // YOLO
         }
       }
       break;

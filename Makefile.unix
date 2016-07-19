@@ -6,6 +6,7 @@
 
 #CC=gcc
 CFLAGS := -O2 -g -c -Wall -Wextra -DHAVE_LIBFLAC $(CFLAGS)
+LDFLAGS := -static
 INCLUDES := -I../opus/include -I/usr/include/FLAC
 
 ifneq (,$(findstring mingw,$(CC)))
@@ -41,16 +42,16 @@ src/info_opus.o: CFLAGS += -DOPUSTOOLS
 	$(CC) $(CFLAGS) $(INCLUDES) $< -o $@
 
 opusenc: src/opus_header.o src/opusenc.o src/resample.o src/audio-in.o src/diag_range.o src/lpc.o src/flac.o src/picture.o $(COMMON_OBJS)
-	$(CC) $(LDFLAGS) $^ -o $@ ../opus/.libs/libopus.a -lm -logg -lFLAC $(LIBS)
+	$(CC) $(LDFLAGS) $^ -o $@ ../opus/libopus.a -logg -lFLAC -lm $(LIBS)
 
 opusdec: src/opus_header.o src/wav_io.o src/wave_out.o src/opusdec.o src/resample.o src/diag_range.o $(COMMON_OBJS)
-	$(CC) $(LDFLAGS) $^ -o $@ ../opus/.libs/libopus.a -lm -logg $(LIBS)
+	$(CC) $(LDFLAGS) $^ -o $@ ../opus/libopus.a -logg -lm $(LIBS)
 
 opusinfo: src/opus_header.o src/opusinfo.o src/info_opus.o src/picture.o $(COMMON_OBJS)
 	$(CC) $(LDFLAGS) $^ -o $@ -logg $(LIBS)
 
 opusrtp: src/opusrtp.o
-	$(CC) $(LDFLAGS) $^ -o $@ ../opus/.libs/libopus.a -logg -lm
+	$(CC) $(LDFLAGS) $^ -o $@ ../opus/libopus.a -logg -lm
 
 
 package_version: force
