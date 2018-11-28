@@ -15,11 +15,9 @@ noinst_HEADERS = src/arch.h \
                  src/diag_range.h \
                  src/flac.h \
                  src/info_opus.h \
-                 src/lpc.h \
-                 src/opusenc.h \
+                 src/encoder.h \
                  src/opus_header.h \
                  src/opusinfo.h \
-                 src/os_support.h \
                  src/picture.h \
                  src/resample_sse.h \
                  src/speex_resampler.h \
@@ -31,13 +29,6 @@ noinst_HEADERS = src/arch.h \
 
 EXTRA_DIST = Makefile.unix \
              man/opusrtp.1 \
-             opus-tools.sln \
-             src/opusdec.vcxproj.filters \
-             src/opusinfo.vcxproj.filters \
-             src/opusenc.vcxproj.filters \
-             src/opusinfo.vcxproj \
-             src/opusenc.vcxproj \
-             src/opusdec.vcxproj \
              include/getopt.h \
              share/getopt.c \
              share/getopt1.c \
@@ -45,21 +36,31 @@ EXTRA_DIST = Makefile.unix \
              win32/config.h \
              win32/unicode_support.h \
              win32/unicode_support.c \
-             win32/version.h
+             win32/VS2015/generate_version.vcxproj \
+             win32/VS2015/opusdec.vcxproj \
+             win32/VS2015/opusdec.vcxproj.filters \
+             win32/VS2015/opusenc.vcxproj \
+             win32/VS2015/opusenc.vcxproj.filters \
+             win32/VS2015/opusinfo.vcxproj \
+             win32/VS2015/opusinfo.vcxproj.filters \
+             win32/VS2015/opus-tools.sln \
+             win32/VS2015/common.props \
+             win32/VS2015/opus-tools.props
 
 dist_man_MANS = man/opusenc.1 man/opusdec.1 man/opusinfo.1
 
-resampler_CPPFLAGS = -DSPX_RESAMPLE_EXPORT= -DRANDOM_PREFIX=opustools -DOUTSIDE_SPEEX -DFLOATING_POINT
+resampler_CPPFLAGS = -DRANDOM_PREFIX=opustools -DOUTSIDE_SPEEX -DRESAMPLE_FULL_SINC_TABLE
 
-opusenc_SOURCES = src/opus_header.c src/opusenc.c src/picture.c src/resample.c src/audio-in.c src/diag_range.c src/flac.c src/lpc.c win32/unicode_support.c
-opusenc_CPPFLAGS = $(AM_CPPFLAGS) $(resampler_CPPFLAGS)
-opusenc_CFLAGS = $(AM_CFLAGS) $(FLAC_CFLAGS)
-opusenc_LDADD = $(OPUS_LIBS) $(FLAC_LIBS) $(OGG_LIBS) $(LIBM)
+opusenc_SOURCES = src/opus_header.c src/opusenc.c src/picture.c src/audio-in.c src/diag_range.c src/flac.c win32/unicode_support.c
+opusenc_CPPFLAGS = $(AM_CPPFLAGS)
+opusenc_CFLAGS = $(AM_CFLAGS) $(LIBOPUSENC_CFLAGS) $(FLAC_CFLAGS)
+opusenc_LDADD = $(LIBOPUSENC_LIBS) $(OPUS_LIBS) $(FLAC_LIBS) $(OGG_LIBS) $(LIBM)
 opusenc_MANS = man/opusenc.1
 
 opusdec_SOURCES = src/opus_header.c src/wav_io.c src/wave_out.c src/opusdec.c src/resample.c src/diag_range.c win32/unicode_support.c
 opusdec_CPPFLAGS = $(AM_CPPFLAGS) $(resampler_CPPFLAGS)
-opusdec_LDADD = $(OPUS_LIBS) $(OGG_LIBS) $(LIBM)
+opusdec_CFLAGS = $(AM_CFLAGS) $(OPUSURL_CFLAGS)
+opusdec_LDADD = $(OPUSURL_LIBS) $(OPUS_LIBS) $(LIBM)
 opusdec_MANS = man/opusdec.1
 
 opusinfo_SOURCES = src/opus_header.c src/opusinfo.c src/info_opus.c src/picture.c win32/unicode_support.c
@@ -68,7 +69,7 @@ opusinfo_LDADD = $(OGG_LIBS)
 opusinfo_MANS = man/opusinfo.1
 
 opusrtp_SOURCES = src/opusrtp.c
-opusrtp_LDADD = $(OPUS_LIBS) $(OGG_LIBS) @LIBPCAP@
+opusrtp_LDADD = $(OPUS_LIBS) $(OGG_LIBS) $(OPUSRTP_LIBS)
 
 #TESTS = FIXME
 

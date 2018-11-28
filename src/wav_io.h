@@ -1,17 +1,17 @@
-/* Copyright (C) 2002 Jean-Marc Valin 
+/* Copyright (C) 2002 Jean-Marc Valin
    File: wav_io.h
 
    Redistribution and use in source and binary forms, with or without
    modification, are permitted provided that the following conditions
    are met:
-   
+
    - Redistributions of source code must retain the above copyright
    notice, this list of conditions and the following disclaimer.
-   
+
    - Redistributions in binary form must reproduce the above copyright
    notice, this list of conditions and the following disclaimer in the
    documentation and/or other materials provided with the distribution.
-   
+
    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
    ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
    LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
@@ -32,12 +32,12 @@
 #include <opus_types.h>
 
 #if !defined(__LITTLE_ENDIAN__) && ( defined(WORDS_BIGENDIAN) || defined(__BIG_ENDIAN__) )
-#define le_short(s) ((short) ((unsigned short) (s) << 8) | ((unsigned short) (s) >> 8))
-#define be_short(s) ((short) (s))
+# define le_short(s) ((short) ((unsigned short) (s) << 8) | ((unsigned short) (s) >> 8))
+# define be_short(s) ((short) (s))
 #else
-#define le_short(s) ((short) (s))
-#define be_short(s) ((short) ((unsigned short) (s) << 8) | ((unsigned short) (s) >> 8))
-#endif 
+# define le_short(s) ((short) (s))
+# define be_short(s) ((short) ((unsigned short) (s) << 8) | ((unsigned short) (s) >> 8))
+#endif
 
 /** Convert little endian */
 static inline opus_int32 le_int(opus_int32 i)
@@ -55,8 +55,39 @@ static inline opus_int32 le_int(opus_int32 i)
 #endif
 }
 
+static inline float get_le_float(float *ptr)
+{
+#if !defined(__LITTLE_ENDIAN__) && ( defined(WORDS_BIGENDIAN) || defined(__BIG_ENDIAN__) )
+    float val;
+    char *lebytes = (char *)ptr;
+    char *nebytes = (char *)&val;
+    nebytes[0] = lebytes[3];
+    nebytes[1] = lebytes[2];
+    nebytes[2] = lebytes[1];
+    nebytes[3] = lebytes[0];
+    return val;
+#else
+    return *ptr;
+#endif
+}
+
+static inline void put_le_float(float *ptr, float val)
+{
+#if !defined(__LITTLE_ENDIAN__) && ( defined(WORDS_BIGENDIAN) || defined(__BIG_ENDIAN__) )
+    char *lebytes = (char *)ptr;
+    char *nebytes = (char *)&val;
+    lebytes[0] = nebytes[3];
+    lebytes[1] = nebytes[2];
+    lebytes[2] = nebytes[1];
+    lebytes[3] = nebytes[0];
+#else
+    *ptr = val;
+#endif
+}
+
 void adjust_wav_mapping(int mapping_family, int channels, unsigned char *stream_map);
 
 int write_wav_header(FILE *file, int rate, int mapping_family, int channels, int fp);
+int update_wav_header(FILE *file, int format, opus_int64 audio_size);
 
 #endif

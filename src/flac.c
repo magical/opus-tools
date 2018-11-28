@@ -22,6 +22,7 @@
   LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
   NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.*/
+
 #if defined(HAVE_CONFIG_H)
 # include <config.h>
 #endif
@@ -29,6 +30,7 @@
 #include <math.h>
 #include <string.h>
 #include <locale.h>
+#include "encoder.h"
 #include "flac.h"
 #include "opus_header.h"
 #include "picture.h"
@@ -38,7 +40,8 @@
 /*Callback to read more data for the FLAC decoder.*/
 static FLAC__StreamDecoderReadStatus read_callback(
    const FLAC__StreamDecoder *decoder,FLAC__byte buffer[],size_t *bytes,
-   void *client_data){
+   void *client_data)
+{
   flacfile *flac;
   (void)decoder;
   flac=(flacfile *)client_data;
@@ -72,7 +75,8 @@ static FLAC__StreamDecoderReadStatus read_callback(
 
 /*Callback to test the stream for EOF.*/
 static FLAC__bool eof_callback(const FLAC__StreamDecoder *decoder,
-   void *client_data){
+   void *client_data)
+{
   flacfile *flac;
   (void)decoder;
   flac=(flacfile *)client_data;
@@ -81,7 +85,8 @@ static FLAC__bool eof_callback(const FLAC__StreamDecoder *decoder,
 
 /*Callback to process a metadata packet.*/
 static void metadata_callback(const FLAC__StreamDecoder *decoder,
-   const FLAC__StreamMetadata *metadata,void *client_data){
+   const FLAC__StreamMetadata *metadata,void *client_data)
+{
   flacfile *flac;
   oe_enc_opt *inopt;
   (void)decoder;
@@ -125,6 +130,7 @@ static void metadata_callback(const FLAC__StreamDecoder *decoder,
           char *entry;
           char *end;
           entry=(char *)comments[i].entry;
+          if(!entry)continue;
           /*Check for ReplayGain tags.
             Parse the ones we have R128 equivalents for, and skip the others.*/
           if(oi_strncasecmp(entry,"REPLAYGAIN_REFERENCE_LOUDNESS=",30)==0){
@@ -167,7 +173,7 @@ static void metadata_callback(const FLAC__StreamDecoder *decoder,
                _("Discarding comment not in the form name=value\n"));
             continue;
           }
-          comment_add(&inopt->comments,&inopt->comments_length,NULL,entry);
+          ope_comments_add_string(inopt->comments,entry);
         }
         setlocale(LC_NUMERIC,saved_locale);
         /*Set the header gain to the album gain */
@@ -181,68 +187,42 @@ static void metadata_callback(const FLAC__StreamDecoder *decoder,
         if(saw_album_gain){
           char album_gain_buf[11];
           sprintf(album_gain_buf,"%.2f dB", reference_loudness-89);
-          comment_add(&inopt->comments,&inopt->comments_length,
-             "REPLAYGAIN_ALBUM_GAIN", album_gain_buf);
-          comment_add(&inopt->comments,&inopt->comments_length,
-             "REPLAYGAIN_ALBUM_PEAK", "0.0"); // YOLO
+          ope_comments_add(inopt->comments, "REPLAYGAIN_ALBUM_GAIN", album_gain_buf);
+          ope_comments_add(inopt->comments, "REPLAYGAIN_ALBUM_PEAK", "0.0"); // YOLO
         }
         /*If there was a track gain, then adjust the replaygain for that.*/
         if(saw_track_gain){
           char track_gain_buf[11];
           gain=track_gain-album_gain+(reference_loudness-89);
           sprintf(track_gain_buf,"%.2f dB",gain);
-          comment_add(&inopt->comments,&inopt->comments_length,
-             "REPLAYGAIN_TRACK_GAIN",track_gain_buf);
-          comment_add(&inopt->comments,&inopt->comments_length,
-             "REPLAYGAIN_TRACK_PEAK", "0.0"); // YOLO
+          ope_comments_add(inopt->comments, "REPLAYGAIN_TRACK_GAIN",track_gain_buf);
+          ope_comments_add(inopt->comments, "REPLAYGAIN_TRACK_PEAK", "0.0"); // YOLO
         }
       }
       break;
     case FLAC__METADATA_TYPE_PICTURE:
-      {
-        char  *buf;
-        char  *b64;
-        size_t mime_type_length;
-        size_t description_length;
-        size_t buf_sz;
-        size_t b64_sz;
-        size_t offs;
-        if(!inopt->copy_pictures)break;
-        mime_type_length=strlen(metadata->data.picture.mime_type);
-        description_length=strlen((char *)metadata->data.picture.description);
-        buf_sz=32+mime_type_length+description_length
-         +metadata->data.picture.data_length;
-        buf=(char *)malloc(buf_sz);
-        offs=0;
-        WRITE_U32_BE(buf+offs,metadata->data.picture.type);
-        offs+=4;
-        WRITE_U32_BE(buf+offs,(FLAC__uint32)mime_type_length);
-        offs+=4;
-        memcpy(buf+offs,metadata->data.picture.mime_type,mime_type_length);
-        offs+=mime_type_length;
-        WRITE_U32_BE(buf+offs,(FLAC__uint32)description_length);
-        offs+=4;
-        memcpy(buf+offs,metadata->data.picture.description,description_length);
-        offs+=description_length;
-        WRITE_U32_BE(buf+offs,metadata->data.picture.width);
-        offs+=4;
-        WRITE_U32_BE(buf+offs,metadata->data.picture.height);
-        offs+=4;
-        WRITE_U32_BE(buf+offs,metadata->data.picture.depth);
-        offs+=4;
-        WRITE_U32_BE(buf+offs,metadata->data.picture.colors);
-        offs+=4;
-        WRITE_U32_BE(buf+offs,metadata->data.picture.data_length);
-        offs+=4;
-        memcpy(buf+offs,metadata->data.picture.data,
-           metadata->data.picture.data_length);
-        b64_sz=BASE64_LENGTH(buf_sz)+1;
-        b64=(char *)malloc(b64_sz);
-        base64_encode(b64,buf,buf_sz);
-        free(buf);
-        comment_add(&inopt->comments,&inopt->comments_length,
-           "METADATA_BLOCK_PICTURE",b64);
-        free(b64);
+      if(!inopt->copy_pictures)break;
+      if((unsigned)metadata->data.picture.type>20){
+        fprintf(stderr,
+          _("WARNING: Skipping picture with invalid picture type %u\n"),
+          (unsigned)metadata->data.picture.type);
+      }else if(!strcmp(metadata->data.picture.mime_type,"-->")){
+        fprintf(stderr,
+          _("WARNING: Skipping unsupported picture URL (type %u)\n"),
+          (unsigned)metadata->data.picture.type);
+      }else{
+        int ret;
+        ret=ope_comments_add_picture_from_memory(inopt->comments,
+          (const char *)metadata->data.picture.data,
+          (size_t)metadata->data.picture.data_length,
+          (int)metadata->data.picture.type,
+          (const char *)metadata->data.picture.description);
+        if(ret<0){
+          fprintf(stderr,_("WARNING: Skipping picture (%s, type %u): %s\n"),
+            metadata->data.picture.mime_type,
+            (unsigned)metadata->data.picture.type,
+            ope_strerror(ret));
+        }
       }
       break;
     default:
@@ -253,7 +233,8 @@ static void metadata_callback(const FLAC__StreamDecoder *decoder,
 /*Callback to process an audio frame.*/
 static FLAC__StreamDecoderWriteStatus write_callback(
    const FLAC__StreamDecoder *decoder,const FLAC__Frame *frame,
-   const FLAC__int32 *const buffer[],void *client_data){
+   const FLAC__int32 *const buffer[],void *client_data)
+{
   flacfile *flac;
   int channels;
   opus_int32 blocksize;
@@ -278,7 +259,9 @@ static FLAC__StreamDecoderWriteStatus write_callback(
   /*We do allow the bits per sample to change, though this will confound Opus's
     silence detection.*/
   bits_per_sample=frame->header.bits_per_sample;
-  speex_assert(bits_per_sample>0&&bits_per_sample<=32);
+  if(bits_per_sample<1||bits_per_sample>32){
+    return FLAC__STREAM_DECODER_WRITE_STATUS_ABORT;
+  }
   scale=(0x80000000U>>(bits_per_sample-1))*(1.0F/0x80000000U);
   channel_permute=flac->channel_permute;
   block_buf=flac->block_buf;
@@ -298,13 +281,15 @@ static FLAC__StreamDecoderWriteStatus write_callback(
 
 /*Dummy error callback (required by libFLAC).*/
 static void error_callback(const FLAC__StreamDecoder *decoder,
-   FLAC__StreamDecoderErrorStatus status,void *client_data){
+   FLAC__StreamDecoderErrorStatus status,void *client_data)
+{
   (void)decoder;
   (void)status;
   (void)client_data;
 }
 
-int flac_id(unsigned char *buf,int len){
+int flac_id(unsigned char *buf,int len)
+{
   /*Something screwed up.*/
   if(len<4)return 0;
   /*Not FLAC.*/
@@ -313,7 +298,8 @@ int flac_id(unsigned char *buf,int len){
   return 1;
 }
 
-int oggflac_id(unsigned char *buf,int len){
+int oggflac_id(unsigned char *buf,int len)
+{
   /*Something screwed up.*/
   if(len<33)return 0;
   /*Not Ogg.*/
@@ -325,7 +311,8 @@ int oggflac_id(unsigned char *buf,int len){
 }
 
 /*Read more data for the encoder.*/
-static long flac_read(void *client_data,float *buffer,int samples){
+static long flac_read(void *client_data,float *buffer,int samples)
+{
   flacfile *flac;
   int channels;
   float *block_buf;
@@ -364,7 +351,8 @@ static long flac_read(void *client_data,float *buffer,int samples){
   return ret;
 }
 
-int flac_open(FILE *in,oe_enc_opt *opt,unsigned char *oldbuf,int buflen){
+int flac_open(FILE *in,oe_enc_opt *opt,unsigned char *oldbuf,int buflen)
+{
   flacfile *flac;
   /*Ok. At this point, we know we have a FLAC or an OggFLAC file.
     Set up the FLAC decoder.*/
@@ -377,12 +365,16 @@ int flac_open(FILE *in,oe_enc_opt *opt,unsigned char *oldbuf,int buflen){
   FLAC__stream_decoder_set_metadata_respond(flac->decoder,
      FLAC__METADATA_TYPE_PICTURE);
   flac->inopt=opt;
+  flac->channels=0;
   flac->f=in;
   flac->oldbuf=malloc(buflen*sizeof(*flac->oldbuf));
   memcpy(flac->oldbuf,oldbuf,buflen*sizeof(*flac->oldbuf));
   flac->bufpos=0;
   flac->buflen=buflen;
   flac->block_buf=NULL;
+  flac->block_buf_pos=0;
+  flac->block_buf_len=0;
+  flac->max_blocksize=0;
   if((*(flac_id(oldbuf,buflen)?
      FLAC__stream_decoder_init_stream:FLAC__stream_decoder_init_ogg_stream))(
         flac->decoder,read_callback,NULL,NULL,NULL,eof_callback,
@@ -390,11 +382,11 @@ int flac_open(FILE *in,oe_enc_opt *opt,unsigned char *oldbuf,int buflen){
      FLAC__STREAM_DECODER_INIT_STATUS_OK){
     /*Decode until we get the file length, sample rate, the number of channels,
       and the Vorbis comments (if any).*/
-    if(FLAC__stream_decoder_process_until_end_of_metadata(flac->decoder)){
+    if(FLAC__stream_decoder_process_until_end_of_metadata(flac->decoder)&&
+       flac->channels>0&&flac->channels<=8){
       opt->read_samples=flac_read;
       opt->readdata=flac;
       /*FLAC supports 1 to 8 channels only.*/
-      speex_assert(flac->channels>0&&flac->channels<=8);
       /*It uses the same channel mappings as WAV.*/
       flac->channel_permute=wav_permute_matrix[flac->channels-1];
       return 1;
@@ -405,7 +397,8 @@ int flac_open(FILE *in,oe_enc_opt *opt,unsigned char *oldbuf,int buflen){
   return 0;
 }
 
-void flac_close(void *client_data){
+void flac_close(void *client_data)
+{
   flacfile *flac;
   flac=(flacfile *)client_data;
   free(flac->block_buf);
@@ -418,19 +411,22 @@ void flac_close(void *client_data){
 
 /*FLAC support is disabled.*/
 
-int flac_id(unsigned char *buf,int len){
+int flac_id(unsigned char *buf,int len)
+{
   (void)buf;
   (void)len;
   return 0;
 }
 
-int oggflac_id(unsigned char *buf,int len){
+int oggflac_id(unsigned char *buf,int len)
+{
   (void)buf;
   (void)len;
   return 0;
 }
 
-int flac_open(FILE *in,oe_enc_opt *opt,unsigned char *oldbuf,int buflen){
+int flac_open(FILE *in,oe_enc_opt *opt,unsigned char *oldbuf,int buflen)
+{
   (void)in;
   (void)opt;
   (void)oldbuf;
@@ -438,7 +434,8 @@ int flac_open(FILE *in,oe_enc_opt *opt,unsigned char *oldbuf,int buflen){
   return 0;
 }
 
-void flac_close(void *client_data){
+void flac_close(void *client_data)
+{
   (void)client_data;
 }
 

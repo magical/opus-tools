@@ -11,7 +11,7 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+# include <config.h>
 #endif
 
 #include <stdio.h>
@@ -32,7 +32,7 @@
 #include "info_opus.h"
 #include "picture.h"
 
-#if defined WIN32 || defined _WIN32 || defined WIN64 || defined _WIN64
+#if defined WIN32 || defined _WIN32
 # include "unicode_support.h"
 #else
 # define fopen_utf8(_x,_y) fopen((_x),(_y))
@@ -52,7 +52,8 @@ static int flawed;
 #define CONSTRAINT_PAGE_AFTER_EOS   1
 #define CONSTRAINT_MUXING_VIOLATED  2
 
-static stream_set *create_stream_set(void) {
+static stream_set *create_stream_set(void)
+{
     stream_set *set = calloc(1, sizeof(stream_set));
 
     set->streams = calloc(5, sizeof(stream_processor));
@@ -225,8 +226,8 @@ void check_xiph_comment(stream_processor *stream, int i, const char *comment,
          }
 
          if(broken) {
-             char *simple = malloc (comment_length + 1);
-             char *seq = malloc (comment_length * 3 + 1);
+             char *simple = malloc(comment_length + 1);
+             char *seq = malloc(comment_length * 3 + 1);
              static char hex[] = {'0', '1', '2', '3', '4', '5', '6', '7',
                                   '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
              int k, c1 = 0, c2 = 0;
@@ -246,8 +247,8 @@ void check_xiph_comment(stream_processor *stream, int i, const char *comment,
                    "%d (stream %d): invalid sequence \"%s\": %s\n"), i,
                    stream->num, simple, seq);
              broken = 1;
-             free (simple);
-             free (seq);
+             free(simple);
+             free(seq);
              break;
          }
 
@@ -377,7 +378,7 @@ void check_xiph_comment(stream_processor *stream, int i, const char *comment,
          j += 4;
          mime_type_length = READ_U32_BE(data+j);
          if(mime_type_length > (size_t)data_sz-32) {
-             oi_warn(_("WARNING: Invalid mime type length in "
+             oi_warn(_("WARNING: Invalid media type length in "
                    "METADATA_BLOCK_PICTURE comment %d (stream %d): "
                    "%lu bytes when %i are available\n"), i, stream->num,
                    (long)mime_type_length, data_sz-32);
@@ -386,7 +387,7 @@ void check_xiph_comment(stream_processor *stream, int i, const char *comment,
          }
          for (j += 4; j < 8+(int)mime_type_length; j++) {
              if(data[j] < 0x20 || data[j] > 0x7E) {
-                 oi_warn(_("WARNING: Invalid character in mime type of "
+                 oi_warn(_("WARNING: Invalid character in media type of "
                        "METADATA_BLOCK_PICTURE comment %d (stream %d): "
                        "0x%02X\n"), i, stream->num, data[j]);
                  broken = 1;
@@ -444,7 +445,7 @@ void check_xiph_comment(stream_processor *stream, int i, const char *comment,
              if(!is_jpeg(data+j, image_length)) {
                  oi_warn(_("WARNING: Invalid image data in "
                        "METADATA_BLOCK_PICTURE comment %d (stream %d): "
-                       "mime type is %.*s but image does not appear to be "
+                       "media type is %.*s but image does not appear to be "
                        "JPEG\n"), i, stream->num, mime_type_length, data+8);
                  free(data);
                  return;
@@ -457,7 +458,7 @@ void check_xiph_comment(stream_processor *stream, int i, const char *comment,
              if(!is_png(data+j, image_length)) {
                  oi_warn(_("WARNING: Invalid image data in "
                        "METADATA_BLOCK_PICTURE comment %d (stream %d): "
-                       "mime type is %.*s but image does not appear to be "
+                       "media type is %.*s but image does not appear to be "
                        "PNG\n"), i, stream->num, mime_type_length, data+8);
                  free(data);
                  return;
@@ -470,7 +471,7 @@ void check_xiph_comment(stream_processor *stream, int i, const char *comment,
              if(!is_gif(data+j, image_length)) {
                  oi_warn(_("WARNING: Invalid image data in "
                        "METADATA_BLOCK_PICTURE comment %d (stream %d): "
-                       "mime type is %.*s but image does not appear to be "
+                       "media type is %.*s but image does not appear to be "
                        "PNG\n"), i, stream->num, mime_type_length, data+8);
                  free(data);
                  return;
@@ -502,7 +503,7 @@ void check_xiph_comment(stream_processor *stream, int i, const char *comment,
              }
          }
          else {
-             oi_warn(_("WARNING: Unknown mime type in "
+             oi_warn(_("WARNING: Unknown media type in "
                    "METADATA_BLOCK_PICTURE comment %d (stream %d): "
                    "\"%.*s\" may not be well-supported\n"), i, stream->num,
                    mime_type_length, data+8);
@@ -585,7 +586,7 @@ void check_xiph_comment(stream_processor *stream, int i, const char *comment,
            SPECIFICATION argument to opusenc/flac/etc. (except without an image
            filename, since we don't know the original).*/
          oi_info("\t%.*s%u|%.*s|%.*s|%ux%ux%u",
-               sep+1-comment, comment, (unsigned)picture_type,
+               (int)(sep+1-comment), comment, (unsigned)picture_type,
                mime_type_length, data+8,
                description_length, data+12+mime_type_length,
                (unsigned)width, (unsigned)height, (unsigned)depth);
@@ -802,30 +803,31 @@ static int get_next_page(FILE *f, ogg_sync_state *ogsync, ogg_page *page,
 {
     int ret;
     char *buffer;
-    int bytes;
+    size_t bytes;
 
     while((ret = ogg_sync_pageseek(ogsync, page)) <= 0) {
         if(ret < 0) {
             /* unsynced, we jump over bytes to a possible capture - we don't need to read more just yet */
-            oi_warn(_("WARNING: Hole in data (%d bytes) found at approximate offset %" I64FORMAT " bytes. Corrupted Ogg.\n"), -ret, *written);
+            oi_warn(_("WARNING: Hole in data (%d bytes) found at approximate offset %" PRId64 " bytes. Corrupted Ogg.\n"), -ret, *written);
             continue;
         }
 
         /* zero return, we didn't have enough data to find a whole page, read */
         buffer = ogg_sync_buffer(ogsync, CHUNK);
         bytes = fread(buffer, 1, CHUNK, f);
-        if(bytes <= 0) {
+        if(bytes == 0) {
             ogg_sync_wrote(ogsync, 0);
             return 0;
         }
-        ogg_sync_wrote(ogsync, bytes);
+        ogg_sync_wrote(ogsync, (long)bytes);
         *written += bytes;
     }
 
     return 1;
 }
 
-static void process_file(char *filename) {
+static void process_file(char *filename)
+{
     FILE *file = fopen_utf8(filename, "rb");
     ogg_sync_state ogsync;
     ogg_page page;
@@ -923,13 +925,15 @@ static void process_file(char *filename) {
     fclose(file);
 }
 
-static void version (void) {
-    printf (_("opusinfo from %s %s\n"), PACKAGE_NAME, PACKAGE_VERSION);
+static void version(void)
+{
+    printf(_("opusinfo from %s %s\n"), PACKAGE_NAME, PACKAGE_VERSION);
 }
 
-static void usage(void) {
-    version ();
-    printf (_(" by the Xiph.Org Foundation (http://www.xiph.org/)\n\n"));
+static void usage(void)
+{
+    version();
+    printf(_(" by the Xiph.Org Foundation (https://www.xiph.org/)\n\n"));
     printf(_("(c) 2003-2005 Michael Smith <msmith@xiph.org>\n"
              "(c) 2012 Gregory Maxwell <greg@xiph.org>\n\n"
              "Opusinfo is a fork of ogginfo from the vorbis-tools package\n"
@@ -941,7 +945,7 @@ static void usage(void) {
              "\t   messages, twice will remove warnings.\n"
              "\t-v Make more verbose. This may enable more detailed checks\n"
              "\t   for some stream types.\n"));
-    printf (_("\t-V Output version information and exit.\n"));
+    printf(_("\t-V Output version information and exit.\n"));
 }
 
 int main(int argc, char **argv)
@@ -1012,8 +1016,8 @@ int main(int argc, char **argv)
     }
 
 #ifdef WIN_UNICODE
-   free_commandline_arguments_utf8(&argc_utf8, &argv_utf8);
-   uninit_console_utf8();
+    free_commandline_arguments_utf8(&argc_utf8, &argv_utf8);
+    uninit_console_utf8();
 #endif
 
     return ret;
